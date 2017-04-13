@@ -6,7 +6,6 @@ import sys
 import subprocess
 
 import numpy as np
-import tensorflow as tf
 from keras.layers import Conv2D, Dense, Flatten, Input, Lambda, add, dot
 from keras import backend as K
 from keras.models import Model
@@ -19,7 +18,6 @@ from dqn.policy import *
 from dqn.memory import ReplayMemory
 
 import gym
-from gym import wrappers
 import cPickle as pickle
 
 
@@ -34,6 +32,17 @@ def create_model(num_frames, input_shape, num_actions, model_name='dqn'):
         if model_name == 'cheap_dqn':
             hid = Dense(128, activation='relu')(feature)
             q_value = Dense(num_actions)(hid)
+        elif model_name == 'cheap_dueling_dqn':
+            value1 = Dense(128, activation='relu')(feature)
+            value2 = Dense(1)(value1)
+            advantage1 = Dense(128, activation='relu')(feature)
+            advantage2 = Dense(num_actions)(advantage1)
+            mean_advantage2 = Lambda(lambda x: K.mean(x, axis=1))(advantage2)
+            ones = K.ones([1, num_actions])
+            exp_mean_advantage2 = Lambda(lambda x: K.dot(K.expand_dims(x, axis=1), -ones))(mean_advantage2)
+            sum_adv = add([exp_mean_advantage2, advantage2])
+            exp_value2 = Lambda(lambda x: K.dot(x, ones))(value2)
+            q_value = add([exp_value2, sum_adv])
     else:
         conv1 = Conv2D(32, (8, 8), strides=(4, 4),
             padding='same', activation='relu')(state)

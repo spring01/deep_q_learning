@@ -23,9 +23,8 @@ class DQNAgent(object):
     def fit(self, env):
         self.update_target()
 
-        # filling in self.args.num_burn_in states
         print '########## burning in some samples #############'
-        while len(self.memory) < self.args.size_burn_in:
+        while self.memory.size() < self.args.size_burn_in:
 
             history, state_mem, done = self.init_episode(env)
             act = self.policy['random'].select_action()
@@ -136,8 +135,8 @@ class DQNAgent(object):
 
             print '  episode reward: {:f}'.format(episode_reward)
             total_reward += episode_reward
-            avg_reward = total_reward / self.args.eval_episodes
-        print 'average episode reward: {:f}'.format(avg_reward)
+        average_reward = total_reward / self.args.eval_episodes
+        print 'average episode reward: {:f}'.format(average_reward)
 
     def init_episode(self, env):
         env.reset()
@@ -148,16 +147,14 @@ class DQNAgent(object):
         # begin each episode with 30 noop's
         act = 0
         for _ in xrange(self.args.num_init_frames):
-            frame, frame_rwd, frame_done, _ = env.step(act)
-            frame_mem = self.preproc.frame_to_frame_mem(frame)
-            history.append(frame_mem, frame_rwd, frame_done)
+            self.do_action(env, act, history)
         state_mem, _, done = history.get_next()
         return history, state_mem, done
 
     def do_action(self, env, act, history):
-        frame, frame_rwd, frame_done, _ = env.step(act)
+        frame, frame_reward, frame_done, _ = env.step(act)
         frame_mem = self.preproc.frame_to_frame_mem(frame)
-        history.append(frame_mem, frame_rwd, frame_done)
+        history.append(frame_mem, frame_reward, frame_done)
 
     def pick_action(self, state_mem, policy_type, iter_num=0):
         state = self.preproc.state_mem_to_state(state_mem)

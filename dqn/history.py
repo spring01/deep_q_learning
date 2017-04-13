@@ -5,8 +5,8 @@ class History(object):
         self.obs_list = [None for _ in xrange(num_frames)]
         self.state_diff_frames = action_change_interval
 
-    def append(self, frame_mem, frame_rwd, frame_done):
-        self.obs_list.append((frame_mem, frame_rwd, frame_done))
+    def append(self, frame_mem, frame_reward, frame_done):
+        self.obs_list.append((frame_mem, frame_reward, frame_done))
         self.obs_list.pop(0)
 
     def get_next(self):

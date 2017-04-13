@@ -23,7 +23,7 @@ class ReplayMemory(object):
         self.index = 0
         self.length = 0
 
-    def __len__(self):
+    def size(self):
         return self.length * self.num_frames
 
     def save(self, filepath):
