@@ -15,7 +15,7 @@ from dqn.dqn import DQNAgent
 from dqn.objectives import mean_huber_loss, null_loss
 from dqn.preprocessors import AtariPreprocessor
 from dqn.policy import *
-from dqn.memory import ReplayMemory
+from dqn.memory import PriorityMemory
 
 import gym
 import cPickle as pickle
@@ -105,24 +105,28 @@ def main():
                         help='Discount factor gamma')
     parser.add_argument('--num_init_frames', default=30, type=int,
                         help='Number of initialization frames in an episode')
+    parser.add_argument('--action_steps', default=4, type=int,
+                        help='Do an action for how many steps')
 
     parser.add_argument('--online_train_interval', default=16, type=int,
                         help='Interval to train the online network')
     parser.add_argument('--target_reset_interval', default=160000, type=int,
                         help='Interval to reset the target network')
-    parser.add_argument('--action_change_interval', default=4, type=int,
-                        help='Interval to change action')
     parser.add_argument('--print_loss_interval', default=1000, type=int,
                         help='Interval to print losses')
 
-    parser.add_argument('--replay_buffer_size', default=100000, type=int,
-                        help='Replay buffer size')
-    parser.add_argument('--size_burn_in', default=10000, type=int,
+    parser.add_argument('--memory_steps', default=100000, type=int,
+                        help='Replay memory size')
+    parser.add_argument('--burn_in_steps', default=10000, type=int,
                         help='Fill the replay memory to how much size before update')
     parser.add_argument('--batch_size', default=32, type=int,
                         help='How many samples in each minibatch')
+    parser.add_argument('--mem_alpha', default=0.6, type=float,
+                        help='Exponent alpha in prioritized replay memory')
+    parser.add_argument('--mem_beta_init', default=0.4, type=float,
+                        help='Initial beta in prioritized replay memory')
 
-    parser.add_argument('--learning_rate', default=1e-4, type=float,
+    parser.add_argument('--learning_rate', default=1e-5, type=float,
                         help='Learning rate alpha')
     parser.add_argument('--explore_prob', default=0.01, type=float,
                         help='Exploration probability in epsilon-greedy')
@@ -133,7 +137,7 @@ def main():
     parser.add_argument('--decay_steps', default=2000000, type=int,
                         help='Decay steps in linear-decay epsilon-greedy')
 
-    parser.add_argument('--num_train', default=10000000, type=int,
+    parser.add_argument('--train_steps', default=10000000, type=int,
                         help='Number of training sampled interactions with the environment')
     parser.add_argument('--max_episode_length', default=10000000, type=int,
                         help='Maximum length of an episode')
@@ -173,7 +177,8 @@ def main():
     q_network = {'online': model_online, 'target': model_target}
 
     preproc = AtariPreprocessor(args.input_shape)
-    memory = ReplayMemory(args.replay_buffer_size, args.num_frames)
+    memory = PriorityMemory(args.memory_steps, args.action_steps,
+        args.mem_alpha, args.mem_beta_init, args.train_steps)
 
     policy_random = UniformRandomPolicy(num_actions)
     policy_train = LinearDecayGreedyEpsilonPolicy(args.decay_prob_start,
@@ -192,7 +197,7 @@ def main():
             agent.memory = pickle.load(save_memory)
 
     print '########## training #############'
-    agent.fit(env)
+    agent.train(env)
 
 
 

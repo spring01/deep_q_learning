@@ -5,8 +5,7 @@ from history import History
 
 class DQNAgent(object):
 
-    def __init__(self, num_actions, q_network, preproc, memory,
-                 policy, args):
+    def __init__(self, num_actions, q_network, preproc, memory, policy, args):
         self.num_actions = num_actions
         self.q_network = q_network
         self.preproc = preproc
@@ -20,16 +19,16 @@ class DQNAgent(object):
         self.q_network['online'].compile(loss=loss, optimizer=optimizer)
         self.q_network['target'].compile(loss=loss, optimizer=optimizer)
 
-    def fit(self, env):
+    def train(self, env):
         self.update_target()
 
-        print '########## burning in some samples #############'
-        while self.memory.size() < self.args.size_burn_in:
+        print '########## burning in some steps #############'
+        while self.memory.size() < self.args.burn_in_steps:
 
             history, state_mem, done = self.init_episode(env)
             act = self.policy['random'].select_action()
             for ep_iter in xrange(self.args.max_episode_length):
-                if _every_not_0(ep_iter, self.args.action_change_interval):
+                if _every_not_0(ep_iter, self.args.action_steps):
                     # current list in history is the next state
                     state_mem_next, reward, done = history.get_next()
 
@@ -50,13 +49,13 @@ class DQNAgent(object):
 
         iter_num = 0
         eval_flag = False
-        while iter_num <= self.args.num_train:
+        while iter_num <= self.args.train_steps:
             history, state_mem, done = self.init_episode(env)
 
             print '########## begin new episode #############'
             act = self.pick_action(state_mem, 'train', iter_num)
             for ep_iter in xrange(self.args.max_episode_length):
-                if _every_not_0(ep_iter, self.args.action_change_interval):
+                if _every_not_0(ep_iter, self.args.action_steps):
                     # current list in history is the next state
                     state_mem_next, reward, done = history.get_next()
                     reward = self.preproc.clip_reward(reward)
@@ -78,7 +77,7 @@ class DQNAgent(object):
 
                 # update networks
                 if _every(iter_num, self.args.online_train_interval):
-                    self.train_online()
+                    self.train_online(iter_num)
                 if _every(iter_num, self.args.target_reset_interval):
                     self.update_target()
 
@@ -103,12 +102,13 @@ class DQNAgent(object):
                     self.print_loss()
 
                 iter_num += 1
+
             # evaluation
             if eval_flag:
                 eval_flag = False
                 print '########## evaluation #############'
                 self.evaluate(env)
-            print '{:d} out of {:d} iterations'.format(iter_num, self.args.num_train)
+            print '{:d} out of {:d} iterations'.format(iter_num, self.args.train_steps)
 
     def evaluate(self, env):
         total_reward = 0.0
@@ -118,7 +118,7 @@ class DQNAgent(object):
             episode_reward = 0.0
             act = self.pick_action(state_mem, 'eval')
             for ep_iter in xrange(self.args.max_episode_length):
-                if _every_not_0(ep_iter, self.args.action_change_interval):
+                if _every_not_0(ep_iter, self.args.action_steps):
                     # current list in history is the next state
                     state_mem, reward, done = history.get_next()
                     episode_reward += reward
@@ -142,7 +142,7 @@ class DQNAgent(object):
         env.reset()
 
         # construct a history object
-        history = History(self.args.num_frames, self.args.action_change_interval)
+        history = History(self.args.num_frames, self.args.action_steps)
 
         # begin each episode with 30 noop's
         act = 0
@@ -162,21 +162,22 @@ class DQNAgent(object):
         q_online = self.q_network['online'].predict([state, self.null_act])[1]
         return self.policy[policy_type].select_action(q_online, iter_num)
 
-    def train_online(self):
-        batch, input_b, act_b, input_b_n = self.get_batch()
-        online, target = self.roll_online_target()
-        q_target_b = self.get_q_target(batch, input_b_n, act_b, online, target)
-        online.train_on_batch([input_b, act_b], [q_target_b, self.null_target])
+    def train_online(self, iter_num):
+        batch, b_idx, b_prob, b_state, b_act, b_state_next = self.get_batch()
+        batch_wts = self.memory.get_batch_weights(b_idx, b_prob, iter_num)
+        q_target_b, online = self.get_q_target(batch, b_state_next, b_act)
+        q_online_b_act = self.q_network['online'].predict([b_state, b_act])[0]
+        self.memory.update_priority(b_idx, q_target_b - q_online_b_act)
+        online.train_on_batch([b_state, b_act], [q_target_b, self.null_target],
+                              sample_weight=[batch_wts, batch_wts])
 
     def print_loss(self):
-        batch, input_b, act_b, input_b_n = self.get_batch()
-        online, target = self.roll_online_target()
-        q_target_b = self.get_q_target(batch, input_b_n, act_b, online, target)
-        null_target = np.zeros(act_b.shape)
-        loss_online = self.q_network['online'].evaluate([input_b, act_b],
-            [q_target_b, null_target], verbose=0)
-        loss_target = self.q_network['target'].evaluate([input_b, act_b],
-            [q_target_b, null_target], verbose=0)
+        batch, _, _, b_state, b_act, b_state_next = self.get_batch()
+        q_target_b, _ = self.get_q_target(batch, b_state_next, b_act)
+        loss_online = self.q_network['online'].evaluate([b_state, b_act],
+            [q_target_b, self.null_target], verbose=0)
+        loss_target = self.q_network['target'].evaluate([b_state, b_act],
+            [q_target_b, self.null_target], verbose=0)
         print 'losses:', loss_online[0], loss_target[0]
 
     def update_target(self):
@@ -185,34 +186,31 @@ class DQNAgent(object):
         self.q_network['target'].set_weights(online_weights)
 
     def get_batch(self):
-        batch = self.memory.sample(self.args.batch_size)
-        input_b = []
-        act_b = []
+        batch, b_idx, b_prob = self.memory.sample(self.args.batch_size)
+        b_state = []
+        b_act = []
         one_hot_eye = np.eye(self.num_actions, dtype=np.float32)
-        input_b_n = []
-        for st_m, act, rew, st_m_n, done_b in batch:
+        b_state_next = []
+        for st_m, act, rew, st_m_n, _ in batch:
             st = self.preproc.state_mem_to_state(st_m)
-            input_b.append(st)
-            act_b.append(one_hot_eye[act].copy())
+            b_state.append(st)
+            b_act.append(one_hot_eye[act].copy())
             st_n = self.preproc.state_mem_to_state(st_m_n)
-            input_b_n.append(st_n)
-        input_b = np.stack(input_b)
-        act_b = np.stack(act_b)
-        input_b_n = np.stack(input_b_n)
-        return batch, input_b, act_b, input_b_n
+            b_state_next.append(st_n)
+        b_state = np.stack(b_state)
+        b_act = np.stack(b_act)
+        b_state_next = np.stack(b_state_next)
+        return batch, b_idx, b_prob, b_state, b_act, b_state_next
 
-    def roll_online_target(self):
+    def get_q_target(self, batch, b_state_next, b_act):
         if np.random.rand() < 0.5:
             online = self.q_network['target']
             target = self.q_network['online']
         else:
             online = self.q_network['online']
             target = self.q_network['target']
-        return online, target
-
-    def get_q_target(self, batch, input_b_n, act_b, online, target):
-        q_online_b_n = online.predict([input_b_n, act_b])[1]
-        q_target_b_n = target.predict([input_b_n, act_b])[1]
+        q_online_b_n = online.predict([b_state_next, b_act])[1]
+        q_target_b_n = target.predict([b_state_next, b_act])[1]
         q_target_b = []
         ziplist = zip(q_online_b_n, q_target_b_n, batch)
         for qon, qtn, (_, _, rew, _, db) in ziplist:
@@ -220,7 +218,7 @@ class DQNAgent(object):
             if not db:
                 full_reward += self.args.discount * qon[np.argmax(qtn)]
             q_target_b.append([full_reward])
-        return np.stack(q_target_b)
+        return np.stack(q_target_b), online
 
 def _every(iteration, interval):
     return not (iteration % interval)
