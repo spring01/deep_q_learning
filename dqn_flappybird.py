@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-"""Run Atari Environment with DQN."""
+"""Run FlappyBird Environment with DQN."""
 
 # common imports
 import gym
+import gym_ple
 import argparse
 from dqn.dqn import DQNAgent
 from dqn.objectives import mean_huber_loss, null_loss
@@ -14,13 +15,13 @@ from dqn.qnetwork import create_model
 from keras.optimizers import Adam
 
 # game specific imports
-from atari.preproc import AtariPreprocessor
+from flappybird.preproc import FlappyBirdPreprocessor
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run DQN on Atari games')
-    parser.add_argument('--env', default='Breakout-v0',
-        help='Atari env name')
+    parser = argparse.ArgumentParser(description='Run DQN on Flappy Bird')
+    parser.add_argument('--env', default='FlappyBird-v0',
+        help='Flappy Bird env name')
     parser.add_argument('--output', default='atari-v0',
         help='Directory to save data to')
     parser.add_argument('--resize', nargs=2, type=int, default=(84, 110),
@@ -57,7 +58,7 @@ def main():
     num_act = env.action_space.n
 
     # preprocessor
-    preproc = AtariPreprocessor(args.resize)
+    preproc = FlappyBirdPreprocessor(args.resize)
 
     # online and target q networks
     state_shape = preproc.height, preproc.width, args.num_frames
