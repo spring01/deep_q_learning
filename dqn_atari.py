@@ -10,11 +10,11 @@ from dqn.policy import *
 from dqn.history import History
 from dqn.memory import PriorityMemory
 from dqn.util import get_output_folder
-from keras_model import create_model
+from dqn.qnetwork import create_model
 from keras.optimizers import Adam
 
 # game specific imports
-from atari_preproc import AtariPreprocessor
+from atari.preprocessor import AtariPreprocessor
 
 
 def main():
