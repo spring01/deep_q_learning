@@ -5,15 +5,15 @@ from PIL import Image
 
 class AtariPreprocessor(object):
 
-    def __init__(self, new_size):
-        self.new_size = new_size
+    def __init__(self, resize):
+        self.resize = resize
 
     def frame_to_frame_mem(self, state):
         img = Image.fromarray(state)
         img = img.convert('L')
-        img = img.resize(self.new_size)
-        width = self.new_size[0]
-        height = self.new_size[1]
+        img = img.resize(self.resize)
+        width = self.resize[0]
+        height = self.resize[1]
         img = img.crop((0, height - width, width, height))
         return np.asarray(img)
 

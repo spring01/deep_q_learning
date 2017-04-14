@@ -1,203 +1,96 @@
 #!/usr/bin/env python
 """Run Atari Environment with DQN."""
+
+# common imports
+import gym
 import argparse
-import os
-import sys
-import subprocess
-
-import numpy as np
-from keras.layers import Conv2D, Dense, Flatten, Input, Lambda, add, dot
-from keras import backend as K
-from keras.models import Model
-from keras.optimizers import Adam
-
 from dqn.dqn import DQNAgent
 from dqn.objectives import mean_huber_loss, null_loss
-from dqn.preprocessors import AtariPreprocessor
 from dqn.policy import *
+from dqn.history import History
 from dqn.memory import PriorityMemory
+from dqn.util import get_output_folder
+from keras_model import create_model
+from keras.optimizers import Adam
 
-import gym
-import cPickle as pickle
-
-
-def create_model(num_frames, input_shape, num_actions, model_name='dqn'):
-    width = input_shape[0]
-    model_input_shape = width, width, num_frames
-    state = Input(shape=model_input_shape)
-    if 'cheap' in model_name:
-        conv1 = Conv2D(16, (8, 8), strides=(4, 4), activation='relu')(state)
-        conv2 = Conv2D(32, (4, 4), strides=(2, 2), activation='relu')(conv1)
-        feature = Flatten()(conv2)
-        if model_name == 'cheap_dqn':
-            hid = Dense(128, activation='relu')(feature)
-            q_value = Dense(num_actions)(hid)
-        elif model_name == 'cheap_dueling_dqn':
-            value1 = Dense(128, activation='relu')(feature)
-            value2 = Dense(1)(value1)
-            advantage1 = Dense(128, activation='relu')(feature)
-            advantage2 = Dense(num_actions)(advantage1)
-            mean_advantage2 = Lambda(lambda x: K.mean(x, axis=1))(advantage2)
-            ones = K.ones([1, num_actions])
-            exp_mean_advantage2 = Lambda(lambda x: K.dot(K.expand_dims(x, axis=1), -ones))(mean_advantage2)
-            sum_adv = add([exp_mean_advantage2, advantage2])
-            exp_value2 = Lambda(lambda x: K.dot(x, ones))(value2)
-            q_value = add([exp_value2, sum_adv])
-    else:
-        conv1 = Conv2D(32, (8, 8), strides=(4, 4),
-            padding='same', activation='relu')(state)
-        conv2 = Conv2D(64, (4, 4), strides=(2, 2),
-            padding='same', activation='relu')(conv1)
-        conv3 = Conv2D(64, (3, 3), strides=(1, 1),
-            padding='same', activation='relu')(conv2)
-        feature = Flatten()(conv3)
-        if model_name == 'dqn':
-            hid = Dense(512, activation='relu')(feature)
-            q_value = Dense(num_actions)(hid)
-        elif model_name == 'dueling_dqn':
-            value1 = Dense(512, activation='relu')(feature)
-            value2 = Dense(1)(value1)
-            advantage1 = Dense(512, activation='relu')(feature)
-            advantage2 = Dense(num_actions)(advantage1)
-            mean_advantage2 = Lambda(lambda x: K.mean(x, axis=1))(advantage2)
-            ones = K.ones([1, num_actions])
-            exp_mean_advantage2 = Lambda(lambda x: K.dot(K.expand_dims(x, axis=1), -ones))(mean_advantage2)
-            sum_adv = add([exp_mean_advantage2, advantage2])
-            exp_value2 = Lambda(lambda x: K.dot(x, ones))(value2)
-            q_value = add([exp_value2, sum_adv])
-    act = Input(shape=(num_actions,))
-    q_value_act = dot([q_value, act], axes=1)
-    model = Model(inputs=[state, act], outputs=[q_value_act, q_value])
-    return model
-
-
-def get_output_folder(parent_dir, env_name):
-    experiment_id = 0
-    for folder_name in os.listdir(parent_dir):
-        if not os.path.isdir(os.path.join(parent_dir, folder_name)):
-            continue
-        try:
-            folder_name = int(folder_name.split('-run')[-1])
-            if folder_name > experiment_id:
-                experiment_id = folder_name
-        except:
-            pass
-    experiment_id += 1
-
-    parent_dir = os.path.join(parent_dir, env_name)
-    parent_dir += '-run{}'.format(experiment_id)
-    subprocess.call(["mkdir", "-p", parent_dir])
-    return parent_dir
+# game specific imports
+from atari_preproc import AtariPreprocessor
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run DQN on Atari Breakout')
-    parser.add_argument('--env', default='Breakout-v0', help='Atari env name')
-    parser.add_argument(
-        '-o', '--output', default='atari-v0', help='Directory to save data to')
-    parser.add_argument('--seed', default=0, type=int, help='Random seed')
-
-    parser.add_argument('--input_shape', nargs=2, type=int, default=None,
-                        help='Input shape')
+    parser = argparse.ArgumentParser(description='Run DQN on Atari games')
+    parser.add_argument('--env', default='Breakout-v0',
+        help='Atari env name')
+    parser.add_argument('--output', default='atari-v0',
+        help='Directory to save data to')
+    parser.add_argument('--resize', nargs=2, type=int, default=(84, 110),
+        help='Input shape')
     parser.add_argument('--num_frames', default=4, type=int,
-                        help='Number of frames in a state')
-    parser.add_argument('--discount', default=0.99, type=float,
-                        help='Discount factor gamma')
-    parser.add_argument('--num_init_frames', default=30, type=int,
-                        help='Number of initialization frames in an episode')
-    parser.add_argument('--action_steps', default=4, type=int,
-                        help='Do an action for how many steps')
-
-    parser.add_argument('--online_train_interval', default=16, type=int,
-                        help='Interval to train the online network')
-    parser.add_argument('--target_reset_interval', default=160000, type=int,
-                        help='Interval to reset the target network')
-    parser.add_argument('--print_loss_interval', default=1000, type=int,
-                        help='Interval to print losses')
-
-    parser.add_argument('--memory_steps', default=100000, type=int,
-                        help='Replay memory size')
-    parser.add_argument('--burn_in_steps', default=10000, type=int,
-                        help='Fill the replay memory to how much size before update')
-    parser.add_argument('--batch_size', default=32, type=int,
-                        help='How many samples in each minibatch')
-    parser.add_argument('--mem_alpha', default=0.6, type=float,
-                        help='Exponent alpha in prioritized replay memory')
-    parser.add_argument('--mem_beta_init', default=0.4, type=float,
-                        help='Initial beta in prioritized replay memory')
-
-    parser.add_argument('--learning_rate', default=1e-5, type=float,
-                        help='Learning rate alpha')
-    parser.add_argument('--explore_prob', default=0.01, type=float,
-                        help='Exploration probability in epsilon-greedy')
-    parser.add_argument('--decay_prob_start', default=1.0, type=float,
-                        help='Starting probability in linear-decay epsilon-greedy')
-    parser.add_argument('--decay_prob_end', default=0.1, type=float,
-                        help='Ending probability in linear-decay epsilon-greedy')
-    parser.add_argument('--decay_steps', default=2000000, type=int,
-                        help='Decay steps in linear-decay epsilon-greedy')
-
-    parser.add_argument('--train_steps', default=10000000, type=int,
-                        help='Number of training sampled interactions with the environment')
-    parser.add_argument('--max_episode_length', default=10000000, type=int,
-                        help='Maximum length of an episode')
-    parser.add_argument('--save_interval', default=1000000, type=int,
-                        help='Interval to save weights and memory')
-
+        help='Number of frames in a state')
+    parser.add_argument('--act_steps', default=4, type=int,
+        help='Do an action for how many steps')
     parser.add_argument('--model_name', default='dqn', type=str,
-                        help='Model name')
+        help='Model name')
+    parser.add_argument('--mode', default='train', type=str,
+        help='Running mode; train or test')
 
-    parser.add_argument('--eval_interval', default=100000, type=int,
-                        help='Evaluation interval')
-    parser.add_argument('--eval_episodes', default=20, type=int,
-                        help='Number of episodes in evaluation')
+    DQNAgent.add_arguments(parser)
+    PriorityMemory.add_arguments(parser)
+    Policy.add_arguments(parser)
 
-    parser.add_argument('--do_render', default=False, type=bool,
-                        help='Do rendering or not')
+    # learning rate for the optimizer
+    parser.add_argument('--learning_rate', default=1e-5, type=float,
+        help='Learning rate alpha')
 
+    # checkpoint
     parser.add_argument('--read_weights', default=None, type=str,
-                        help='Read weights from file')
+        help='Read weights from file')
     parser.add_argument('--read_memory', default=None, type=str,
-                        help='Read memory from file')
+        help='Read memory from file')
 
     args = parser.parse_args()
-    print '########## All arguments ##########:', args
-    args.input_shape = tuple(args.input_shape)
-    args.output = get_output_folder(args.output, args.env)
+    print '########## All arguments:', args
+    args.resize = tuple(args.resize)
+    state_shape = args.resize[0], args.resize[0], args.num_frames
+    output = get_output_folder(args.output, args.env)
 
     env = gym.make(args.env)
-    num_actions = env.action_space.n
-    opt_adam = Adam(lr=args.learning_rate)
+    num_act = env.action_space.n
 
-    model_online = create_model(args.num_frames, args.input_shape,
-        num_actions, model_name=args.model_name)
-    model_target = create_model(args.num_frames, args.input_shape,
-        num_actions, model_name=args.model_name)
+    # online and target q networks
+    online = create_model(state_shape, num_act, args.model_name)
+    target = create_model(state_shape, num_act, args.model_name)
+    q_net = {'online': online, 'target': target}
 
-    q_network = {'online': model_online, 'target': model_target}
+    # preprocessor, history, and memory
+    preproc = AtariPreprocessor(args.resize)
+    history = History(args.num_frames, args.act_steps)
+    memory = PriorityMemory(args, args.act_steps, args.train_steps)
 
-    preproc = AtariPreprocessor(args.input_shape)
-    memory = PriorityMemory(args.memory_steps, args.action_steps,
-        args.mem_alpha, args.mem_beta_init, args.train_steps)
+    # initialization, train, evaluation policies
+    policy_init = RandomPolicy(num_act)
+    policy_train = LinearDecayGreedyEpsPolicy(args)
+    policy_eval = GreedyEpsPolicy(args)
+    policy = {'init': policy_init, 'train': policy_train, 'eval': policy_eval}
 
-    policy_random = UniformRandomPolicy(num_actions)
-    policy_train = LinearDecayGreedyEpsilonPolicy(args.decay_prob_start,
-                                                  args.decay_prob_end,
-                                                  args.decay_steps)
-    policy_eval = GreedyEpsilonPolicy(args.explore_prob)
-    policy = {'random': policy_random, 'train': policy_train, 'eval': policy_eval}
+    # construct and compile the dqn agent
+    agent = DQNAgent(num_act, q_net, preproc, history, memory, policy, output,
+                     args)
+    agent.compile([mean_huber_loss, null_loss], Adam(lr=args.learning_rate))
 
-    agent = DQNAgent(num_actions, q_network, preproc, memory, policy, args)
-    agent.compile([mean_huber_loss, null_loss], opt_adam)
-
+    # read weights/memory if requested
     if args.read_weights is not None:
-        agent.q_network['online'].load_weights(args.read_weights)
+        agent.q_net['online'].load_weights(args.read_weights)
     if args.read_memory is not None:
-        with open(args.read_memory, 'rb') as save_memory:
-            agent.memory = pickle.load(save_memory)
+        agent.memory.load(args.read_memory)
 
-    print '########## training #############'
-    agent.train(env)
+    # running
+    if args.mode == 'train':
+        print '########## training #############'
+        agent.train(env)
+    elif args.mode == 'evaluation':
+        print '########## evaluation #############'
+        agent.evaluate(env)
 
 
 

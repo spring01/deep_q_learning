@@ -5,11 +5,23 @@ import cPickle as pickle
 
 class PriorityMemory(object):
 
-    def __init__(self, memory_steps, act_steps, alpha, beta_init, train_steps):
-        self.alpha = alpha
-        self.beta_init = beta_init
+    @staticmethod
+    def add_arguments(parser):
+        parser.add_argument('--memory_steps', default=100000, type=int,
+            help='Replay memory size')
+        parser.add_argument('--burn_in_steps', default=10000, type=int,
+            help='Fill the replay memory to how much size before update')
+        parser.add_argument('--mem_alpha', default=0.6, type=float,
+            help='Exponent alpha in prioritized replay memory')
+        parser.add_argument('--mem_beta_init', default=0.4, type=float,
+            help='Initial beta in prioritized replay memory')
+
+    def __init__(self, args, act_steps, train_steps):
+        self.burn_in_steps = args.burn_in_steps
+        self.alpha = args.mem_alpha
+        self.beta_init = args.mem_beta_init
         self.train_steps = float(train_steps)
-        self.maxlen = int(memory_steps / act_steps)
+        self.maxlen = int(args.memory_steps / act_steps)
         self.indices = range(self.maxlen)
         self.act_steps = act_steps
         self.clear()
@@ -54,4 +66,18 @@ class PriorityMemory(object):
     def save(self, filepath):
         with open(filepath, 'wb') as save:
             pickle.dump(self, save, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def load(self, filepath):
+        with open(filepath, 'rb') as save:
+            memory = pickle.load(save)
+        self.alpha = memory.alpha
+        self.beta_init = memory.beta_init
+        self.train_steps = memory.train_steps
+        self.maxlen = memory.maxlen
+        self.indices = memory.indices
+        self.act_steps = memory.act_steps
+        self.ring_buffer = memory.ring_buffer
+        self.priority = memory.priority
+        self.index = memory.index
+        self.length = memory.length
 
