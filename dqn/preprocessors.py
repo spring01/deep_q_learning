@@ -6,7 +6,9 @@ from PIL import Image
 class Preprocessor(object):
 
     def __init__(self, resize):
-        raise NotImplementedError('This method should be overriden.')
+        self.resize = resize
+        self.width, self.height = self.resize
+        self.crop_tuple = 0, 0, self.width, self.height
 
     def frame_to_frame_mem(self, state):
         img = Image.fromarray(state)
@@ -26,3 +28,22 @@ class Preprocessor(object):
             return -1.0
         else:
             return 0.0
+
+
+class BottomSquarePreprocessor(Preprocessor):
+
+    def __init__(self, resize):
+        self.resize = resize
+        self.width = self.height = self.resize[0]
+        resize_ht = self.resize[1]
+        self.crop_tuple = 0, resize_ht - self.width, self.width, resize_ht
+
+
+class TopSquarePreprocessor(Preprocessor):
+
+    def __init__(self, resize):
+        self.resize = resize
+        self.width = self.height = self.resize[0]
+        self.crop_tuple = 0, 0, self.width, self.width
+
+

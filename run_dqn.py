@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""Run FlappyBird Environment with DQN."""
+"""Run Environment with DQN."""
 
-# common imports
 import gym
-import gym_ple
 import argparse
+from collections import defaultdict
+from keras.optimizers import Adam
 from dqn.dqn import DQNAgent
 from dqn.objectives import mean_huber_loss, null_loss
 from dqn.policy import *
@@ -12,19 +12,16 @@ from dqn.history import History
 from dqn.memory import PriorityMemory
 from dqn.util import get_output_folder
 from dqn.qnetwork import create_model
-from keras.optimizers import Adam
-
-# game specific imports
-from flappybird.preproc import FlappyBirdPreprocessor
+from dqn.preprocessors import *
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run DQN on Flappy Bird')
-    parser.add_argument('--env', default='FlappyBird-v0',
-        help='Flappy Bird env name')
-    parser.add_argument('--output', default='FlappyBird-v0',
+    parser = argparse.ArgumentParser(description='Run DQN on games')
+    parser.add_argument('--env', default='Breakout-v0',
+        help='Environment name')
+    parser.add_argument('--output', default='output',
         help='Directory to save data to')
-    parser.add_argument('--resize', nargs=2, type=int, default=(84, 110),
+    parser.add_argument('--resize', nargs=2, type=int, default=(84, 84),
         help='Input shape')
     parser.add_argument('--num_frames', default=4, type=int,
         help='Number of frames in a state')
@@ -34,6 +31,11 @@ def main():
         help='Model name')
     parser.add_argument('--mode', default='train', type=str,
         help='Running mode; train or test')
+
+    env_preproc = defaultdict(lambda: Preprocessor)
+    env_preproc['Breakout-v0'] = BottomSquarePreprocessor
+    env_preproc['MsPacman-v0'] = TopSquarePreprocessor
+    env_preproc['FlappyBird-v0'] = TopSquarePreprocessor
 
     DQNAgent.add_arguments(parser)
     PriorityMemory.add_arguments(parser)
@@ -49,7 +51,12 @@ def main():
     parser.add_argument('--read_memory', default=None, type=str,
         help='Read memory from file')
 
+    # parse arguments
     args = parser.parse_args()
+
+    # add new environments here
+    if args.env in ['FlappyBird-v0']:
+        import gym_ple
     print '########## All arguments:', args
     args.resize = tuple(args.resize)
 
@@ -58,7 +65,7 @@ def main():
     num_act = env.action_space.n
 
     # preprocessor
-    preproc = FlappyBirdPreprocessor(args.resize)
+    preproc = env_preproc[args.env](args.resize)
 
     # online and target q networks
     state_shape = preproc.height, preproc.width, args.num_frames
@@ -95,6 +102,8 @@ def main():
     elif args.mode == 'evaluation':
         print '########## evaluation #############'
         agent.evaluate(env)
+    elif args.mode == 'random':
+        agent.random(env)
 
 
 

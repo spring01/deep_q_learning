@@ -59,6 +59,34 @@ class DQNAgent(object):
         self.q_net['online'].compile(loss=loss, optimizer=optimizer)
         self.q_net['target'].compile(loss=loss, optimizer=optimizer)
 
+    def random(self, env):
+        total_reward = 0.0
+        for episode in xrange(self.eval_episodes):
+            state_mem, done = self.init_episode(env)
+
+            episode_reward = 0.0
+            act = env.action_space.sample()
+            for ep_iter in xrange(self.max_episode_length):
+                if _every_not_0(ep_iter, self.history.act_steps):
+                    # current list in history is the next state
+                    state_mem, reward, done = self.history.get_next()
+                    episode_reward += reward
+
+                    # get online q value and get action
+                    act = env.action_space.sample()
+
+                # break if done
+                if done:
+                    break
+
+                # do action to get the next state
+                self.do_action(env, act)
+
+            print '  random episode reward: {:f}'.format(episode_reward)
+            total_reward += episode_reward
+        average_reward = total_reward / self.eval_episodes
+        print 'random average episode reward: {:f}'.format(average_reward)
+
     def train(self, env):
         self.update_target()
 
@@ -183,7 +211,7 @@ class DQNAgent(object):
         env.reset()
         self.history.reset()
 
-        # begin each episode with 30 noop's
+        # begin each episode with noop's
         act = 0
         for _ in xrange(self.num_init_frames):
             self.do_action(env, act)
