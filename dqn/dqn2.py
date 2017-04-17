@@ -231,16 +231,15 @@ class DQNAgent(object):
         return self.policy[policy_type].select_action(q_online, iter_num)
 
     def train_online(self, iter_num):
-        batch, b_idx, b_prob, b_state, b_act, b_state_next = self.get_batch()
-        batch_wts = self.memory.get_batch_weights(b_idx, b_prob, iter_num)
+        batch, b_state, b_act, b_state_next = self.get_batch()
+        #~ batch_wts = self.memory.get_batch_weights(b_idx, b_prob, iter_num)
         q_target_b, online = self.get_q_target(batch, b_state_next, b_act)
-        q_online_b_act = self.q_net['online'].predict([b_state, b_act])[0]
-        self.memory.update_priority(b_idx, q_target_b - q_online_b_act)
-        online.train_on_batch([b_state, b_act], [q_target_b, self.null_target],
-                              sample_weight=[batch_wts, batch_wts])
+        #~ q_online_b_act = self.q_net['online'].predict([b_state, b_act])[0]
+        #~ self.memory.update_priority(b_idx, q_target_b - q_online_b_act)
+        online.train_on_batch([b_state, b_act], [q_target_b, self.null_target])
 
     def print_loss(self):
-        batch, _, _, b_state, b_act, b_state_next = self.get_batch()
+        batch, b_state, b_act, b_state_next = self.get_batch()
         q_target_b, _ = self.get_q_target(batch, b_state_next, b_act)
         loss_online = self.q_net['online'].evaluate([b_state, b_act],
             [q_target_b, self.null_target], verbose=0)
@@ -254,7 +253,7 @@ class DQNAgent(object):
         self.q_net['target'].set_weights(online_weights)
 
     def get_batch(self):
-        batch, b_idx, b_prob = self.memory.sample(self.batch_size)
+        batch = self.memory.sample(self.batch_size)
         b_state = []
         b_act = []
         b_state_next = []
@@ -267,7 +266,7 @@ class DQNAgent(object):
         b_state = np.stack(b_state)
         b_act = np.stack(b_act)
         b_state_next = np.stack(b_state_next)
-        return batch, b_idx, b_prob, b_state, b_act, b_state_next
+        return batch, b_state, b_act, b_state_next
 
     def get_q_target(self, batch, b_state_next, b_act):
         if np.random.rand() < 0.5:

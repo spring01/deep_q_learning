@@ -5,7 +5,7 @@ import gym
 import argparse
 from collections import defaultdict
 from keras.optimizers import Adam
-from dqn.dqn import DQNAgent
+from dqn.dqn2 import DQNAgent
 from dqn.objectives import mean_huber_loss, null_loss
 from dqn.policy import *
 from dqn.history import History
@@ -13,6 +13,8 @@ from dqn.memory import PriorityMemory
 from dqn.util import get_output_folder
 from dqn.qnetwork import create_model
 from dqn.preprocessors import *
+
+from dqn.memory_old import ReplayMemory
 
 
 def main():
@@ -35,7 +37,7 @@ def main():
     env_preproc = defaultdict(lambda: Preprocessor)
     env_preproc['Breakout-v0'] = BottomSquarePreprocessor
     env_preproc['MsPacman-v0'] = TopSquarePreprocessor
-    env_preproc['FlappyBird-v0'] = TopSquarePreprocessor
+    env_preproc['FlappyBird-v0'] = FlappyBirdPreprocessor
 
     DQNAgent.add_arguments(parser)
     PriorityMemory.add_arguments(parser)
@@ -75,7 +77,9 @@ def main():
 
     # history, and memory
     history = History(args.num_frames, args.act_steps)
-    memory = PriorityMemory(args, args.act_steps, args.train_steps)
+    #~ memory = PriorityMemory(args, args.act_steps, args.train_steps)
+
+    memory = ReplayMemory(args.memory_steps, args.num_frames, args.burn_in_steps)
 
     # initialization, train, evaluation policies
     policy_init = RandomPolicy(num_act)

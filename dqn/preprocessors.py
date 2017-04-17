@@ -47,3 +47,10 @@ class TopSquarePreprocessor(Preprocessor):
         self.crop_tuple = 0, 0, self.width, self.width
 
 
+class FlappyBirdPreprocessor(TopSquarePreprocessor):
+
+    def clip_reward(self, reward):
+        if reward > 0.0:
+            return 1.0;
+        else:
+            return 0.0

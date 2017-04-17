@@ -1,5 +1,6 @@
 
-from keras.layers import Conv2D, Dense, Flatten, Input, Lambda, add, dot
+from keras.layers import Dense, Flatten, Input, Lambda, add, dot
+from keras.layers.convolutional import Conv2D
 from keras import backend as K
 from keras.models import Model
 
