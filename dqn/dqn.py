@@ -65,7 +65,7 @@ class DQN(object):
     def random(self, env):
         total_reward = 0.0
         for episode in xrange(self.eval_episodes):
-            episode_reward = self.run_episode(env, 'rand', 0)[0]
+            episode_reward = self.run_episode(env, 'rand', 0, store=False)[0]
             print '  random episode reward: {:f}'.format(episode_reward)
             total_reward += episode_reward
         average_reward = total_reward / self.eval_episodes
@@ -76,32 +76,36 @@ class DQN(object):
 
         print '########## burning in some steps #############'
         while self.memory.size() < self.memory.burn_in_steps:
-            self.run_episode(env, 'rand', 0)
+            self.run_episode(env, 'eval', 0)
+            self.memory.print_status()
 
         print '########## begin training #############'
         iter_num = 0
         while iter_num <= self.train_steps:
             _, iter_num, eval_flag = self.run_episode(env, 'train', iter_num)
+            print '  iter {:d} out of {:d}'.format(iter_num, self.train_steps)
+            self.memory.print_status()
             if eval_flag:
                 print '########## evaluation #############'
                 self.evaluate(env)
-            print '  iter {:d} out of {:d}'.format(iter_num, self.train_steps)
+
 
     def evaluate(self, env):
         total_reward = 0.0
         for episode in xrange(self.eval_episodes):
-            episode_reward = self.run_episode(env, 'eval', 0)[0]
+            episode_reward = self.run_episode(env, 'eval', 0, store=False)[0]
             print '  episode reward: {:f}'.format(episode_reward)
             total_reward += episode_reward
         average_reward = total_reward / self.eval_episodes
         print 'average episode reward: {:f}'.format(average_reward)
 
-    def run_episode(self, env, mode, iter_num):
-        print '*** New episode with policy:', mode
+    def run_episode(self, env, mode, iter_num, store=True):
+        print '*** New episode with mode:', mode
+        policy = self.policy[mode]
         state_mem, done = self.init_episode(env)
         episode_reward = 0.0
         eval_flag = False
-        act = self.pick_action(state_mem, mode, iter_num)
+        act = self.pick_action(state_mem, policy, iter_num)
         for ep_iter in xrange(self.max_episode_length):
             if _every_not_0(ep_iter, self.history.act_steps):
                 # current list in history is the next state
@@ -110,12 +114,13 @@ class DQN(object):
                 reward = self.preproc.clip_reward(reward)
 
                 # store transition into replay memory
-                transition = state_mem, act, reward, state_mem_next, done
-                self.memory.append(transition)
+                if store:
+                    transition = state_mem, act, reward, state_mem_next, done
+                    self.memory.append(transition)
                 state_mem = state_mem_next
 
                 # get online q value and get action
-                act = self.pick_action(state_mem, mode, iter_num)
+                act = self.pick_action(state_mem, policy, iter_num)
 
             # break if done
             if done:
@@ -177,11 +182,11 @@ class DQN(object):
         frame_mem = self.preproc.frame_to_frame_mem(frame)
         self.history.append(frame_mem, frame_reward, frame_done)
 
-    def pick_action(self, state_mem, policy_type, iter_num=0):
+    def pick_action(self, state_mem, policy, iter_num=0):
         state = self.preproc.state_mem_to_state(state_mem)
         state = np.stack([state])
         q_online = self.q_net['online'].predict([state, self.null_act])[1]
-        return self.policy[policy_type].select_action(q_online, iter_num)
+        return policy.select_action(q_online, iter_num)
 
     def train_online(self, iter_num):
         batch, b_idx, b_prob, b_state, b_act, b_state_next = self.get_batch()

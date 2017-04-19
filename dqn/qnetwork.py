@@ -8,7 +8,7 @@ from keras import backend as K
 def qnetwork_add_arguments(parser):
     parser.add_argument('--model_name', default='dqn', type=str,
         help='Model name')
-    parser.add_argument('--size_dense', default=256, type=int,
+    parser.add_argument('--dense_size', default=256, type=int,
         help='Number of hidden units in the dense layer')
 
 def create_model(state_shape, num_act, args):
@@ -27,11 +27,11 @@ def create_model(state_shape, num_act, args):
 
     # dueling or regular dqn
     if 'dueling' in args.model_name:
-        value1 = Dense(args.size_dense, activation='relu')(feature)
-        adv1 = Dense(args.size_dense, activation='relu')(feature)
+        value1 = Dense(args.dense_size, activation='relu')(feature)
+        adv1 = Dense(args.dense_size, activation='relu')(feature)
         q_value = dueling(num_act, value1, adv1)
     else:
-        hid = Dense(args.size_dense, activation='relu')(feature)
+        hid = Dense(args.dense_size, activation='relu')(feature)
         q_value = Dense(num_act)(hid)
 
     # build model

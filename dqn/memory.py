@@ -21,6 +21,7 @@ class PriorityMemory(object):
         self.alpha = args.mem_alpha
         self.beta_init = args.mem_beta_init
         self.train_steps = float(train_steps)
+        self.memory_steps = args.memory_steps
         self.maxlen = int(args.memory_steps / act_steps)
         self.indices = range(self.maxlen)
         self.act_steps = act_steps
@@ -50,7 +51,7 @@ class PriorityMemory(object):
     def update_priority(self, batch_idx, batch_td_error):
         batch_priority = np.abs(batch_td_error)
         batch_priority[batch_priority > 1.0] = 1.0
-        batch_priority[batch_priority == 0.0] = 1e-8
+        batch_priority[batch_priority == 0.0] = 1e-16
         self.priority[batch_idx] = batch_priority**self.alpha
 
     def clear(self):
@@ -63,6 +64,9 @@ class PriorityMemory(object):
     def size(self):
         return self.length * self.act_steps
 
+    def print_status(self):
+        print '  memory size: {:d}/{:d}'.format(self.size(), self.memory_steps)
+
     def save(self, filepath):
         with open(filepath, 'wb') as save:
             pickle.dump(self, save, protocol=pickle.HIGHEST_PROTOCOL)
@@ -70,14 +74,8 @@ class PriorityMemory(object):
     def load(self, filepath):
         with open(filepath, 'rb') as save:
             memory = pickle.load(save)
-        self.alpha = memory.alpha
-        self.beta_init = memory.beta_init
-        self.train_steps = memory.train_steps
-        self.maxlen = memory.maxlen
-        self.indices = memory.indices
-        self.act_steps = memory.act_steps
-        self.ring_buffer = memory.ring_buffer
-        self.priority = memory.priority
-        self.index = memory.index
+        self.ring_buffer[:memory.length] = memory.ring_buffer[:memory.length]
+        self.priority[:memory.length] = memory.priority[:memory.length]
+        self.index = memory.length % self.maxlen
         self.length = memory.length
 
