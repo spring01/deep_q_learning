@@ -52,6 +52,6 @@ class TopSquarePreprocessor(Preprocessor):
     def __init__(self, resize):
         self.resize = resize
         self.width = self.height = self.resize[0]
-        self.crop_tuple = 0, 0, self.width, self.width
+        self.crop_tuple = 0, 0, self.width, self.height
 
 

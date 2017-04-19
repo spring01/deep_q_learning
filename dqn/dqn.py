@@ -30,6 +30,8 @@ class DQN(object):
             help='Number of episodes in evaluation')
         parser.add_argument('--do_render', default=False, type=bool,
             help='Do rendering or not')
+        parser.add_argument('--episode_seed', default=None, type=int,
+            help='Setting seed to get the same episode each time')
 
     def __init__(self, num_act, q_net, preproc, history, memory, policy, output,
                  args):
@@ -51,6 +53,7 @@ class DQN(object):
         self.eval_interval = args.eval_interval
         self.eval_episodes = args.eval_episodes
         self.do_render = args.do_render
+        self.episode_seed = args.episode_seed
         self.null_act = np.zeros([1, num_act])
         self.null_target = np.zeros([self.batch_size, num_act])
         self.one_hot_act = np.eye(num_act, dtype=np.float32)
@@ -156,6 +159,8 @@ class DQN(object):
     def init_episode(self, env):
         # reset env and history
         env.reset()
+        if self.episode_seed is not None:
+            env.seed(self.episode_seed)
         self.history.reset()
 
         # begin each episode with noop's
