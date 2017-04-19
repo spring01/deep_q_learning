@@ -74,6 +74,7 @@ def main():
             frame, _, _, _ = env.step(env.action_space.sample())
         preproc.show_effect(frame)
         env.reset()
+        exit()
 
     # online and target q networks
     state_shape = preproc.height, preproc.width, args.num_frames
