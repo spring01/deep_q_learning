@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Run Environment with DQN."""
+"""Play some game with DQN."""
 
 import gym
 import argparse
 from collections import defaultdict
 from keras.optimizers import Adam
-from dqn.dqn2 import DQNAgent
+from dqn.dqn import DQN
 from dqn.objectives import mean_huber_loss, null_loss
 from dqn.policy import *
 from dqn.history import History
@@ -14,11 +14,9 @@ from dqn.util import get_output_folder
 from dqn.qnetwork import create_model
 from dqn.preprocessors import *
 
-from dqn.memory_old import ReplayMemory
-
 
 def main():
-    parser = argparse.ArgumentParser(description='Run DQN on games')
+    parser = argparse.ArgumentParser(description='Play a game with DQN')
     parser.add_argument('--env', default='Breakout-v0',
         help='Environment name')
     parser.add_argument('--output', default='output',
@@ -31,21 +29,17 @@ def main():
         help='Do an action for how many steps')
     parser.add_argument('--model_name', default='dqn', type=str,
         help='Model name')
+    parser.add_argument('--show_preprocessing', default=False, type=bool,
+        help='Show preprocessing effect at the beginning')
     parser.add_argument('--mode', default='train', type=str,
         help='Running mode; train or test')
-
-    env_preproc = defaultdict(lambda: Preprocessor)
-    env_preproc['Breakout-v0'] = BottomSquarePreprocessor
-    env_preproc['MsPacman-v0'] = TopSquarePreprocessor
-    env_preproc['FlappyBird-v0'] = FlappyBirdPreprocessor
-
-    DQNAgent.add_arguments(parser)
+    DQN.add_arguments(parser)
     PriorityMemory.add_arguments(parser)
     Policy.add_arguments(parser)
 
     # learning rate for the optimizer
-    parser.add_argument('--learning_rate', default=1e-5, type=float,
-        help='Learning rate alpha')
+    parser.add_argument('--learning_rate', default=1e-4, type=float,
+        help='Learning rate')
 
     # checkpoint
     parser.add_argument('--read_weights', default=None, type=str,
@@ -67,7 +61,19 @@ def main():
     num_act = env.action_space.n
 
     # preprocessor
+    env_preproc = defaultdict(lambda: Preprocessor)
+    env_preproc['Breakout-v0'] = BottomSquarePreprocessor
+    env_preproc['MsPacman-v0'] = TopSquarePreprocessor
+    env_preproc['FlappyBird-v0'] = TopSquarePreprocessor
     preproc = env_preproc[args.env](args.resize)
+
+    # show preprocessing effect
+    env.reset()
+    if args.show_preprocessing:
+        for _ in range(100):
+            frame, _, _, _ = env.step(env.action_space.sample())
+        preproc.show_effect(frame)
+        env.reset()
 
     # online and target q networks
     state_shape = preproc.height, preproc.width, args.num_frames
@@ -75,22 +81,19 @@ def main():
     target = create_model(state_shape, num_act, args.model_name)
     q_net = {'online': online, 'target': target}
 
-    # history, and memory
+    # history and memory
     history = History(args.num_frames, args.act_steps)
-    #~ memory = PriorityMemory(args, args.act_steps, args.train_steps)
-
-    memory = ReplayMemory(args.memory_steps, args.num_frames, args.burn_in_steps)
+    memory = PriorityMemory(args, args.act_steps, args.train_steps)
 
     # initialization, train, evaluation policies
-    policy_init = RandomPolicy(num_act)
+    policy_rand = RandomPolicy(num_act)
     policy_train = LinearDecayGreedyEpsPolicy(args)
     policy_eval = GreedyEpsPolicy(args)
-    policy = {'init': policy_init, 'train': policy_train, 'eval': policy_eval}
+    policy = {'rand': policy_rand, 'train': policy_train, 'eval': policy_eval}
 
     # construct and compile the dqn agent
     output = get_output_folder(args.output, args.env)
-    agent = DQNAgent(num_act, q_net, preproc, history, memory, policy, output,
-                     args)
+    agent = DQN(num_act, q_net, preproc, history, memory, policy, output, args)
     agent.compile([mean_huber_loss, null_loss], Adam(lr=args.learning_rate))
 
     # read weights/memory if requested
@@ -103,10 +106,11 @@ def main():
     if args.mode == 'train':
         print '########## training #############'
         agent.train(env)
-    elif args.mode == 'evaluation':
+    elif args.mode == 'eval':
         print '########## evaluation #############'
         agent.evaluate(env)
-    elif args.mode == 'random':
+    elif args.mode == 'rand':
+        print '########## random #############'
         agent.random(env)
 
 

@@ -2,7 +2,7 @@
 import os
 import numpy as np
 
-class DQNAgent(object):
+class DQN(object):
 
     @staticmethod
     def add_arguments(parser):
@@ -62,26 +62,7 @@ class DQNAgent(object):
     def random(self, env):
         total_reward = 0.0
         for episode in xrange(self.eval_episodes):
-            state_mem, done = self.init_episode(env)
-
-            episode_reward = 0.0
-            act = env.action_space.sample()
-            for ep_iter in xrange(self.max_episode_length):
-                if _every_not_0(ep_iter, self.history.act_steps):
-                    # current list in history is the next state
-                    state_mem, reward, done = self.history.get_next()
-                    episode_reward += reward
-
-                    # get online q value and get action
-                    act = env.action_space.sample()
-
-                # break if done
-                if done:
-                    break
-
-                # do action to get the next state
-                self.do_action(env, act)
-
+            episode_reward = self.run_episode(env, 'rand', 0)[0]
             print '  random episode reward: {:f}'.format(episode_reward)
             total_reward += episode_reward
         average_reward = total_reward / self.eval_episodes
@@ -92,118 +73,85 @@ class DQNAgent(object):
 
         print '########## burning in some steps #############'
         while self.memory.size() < self.memory.burn_in_steps:
+            self.run_episode(env, 'rand', 0)
 
-            state_mem, done = self.init_episode(env)
-            act = self.policy['init'].select_action()
-            for ep_iter in xrange(self.max_episode_length):
-                if _every_not_0(ep_iter, self.history.act_steps):
-                    # current list in history is the next state
-                    state_mem_next, reward, done = self.history.get_next()
-                    reward = self.preproc.clip_reward(reward)
-
-                    # store transition into replay memory
-                    transition = state_mem, act, reward, state_mem_next, done
-                    self.memory.append(transition)
-                    state_mem = state_mem_next
-
-                    # get new action
-                    act = self.policy['init'].select_action()
-
-                # break if done
-                if done:
-                    break
-
-                # do action to get the next state
-                self.do_action(env, act)
-
+        print '########## begin training #############'
         iter_num = 0
-        eval_flag = False
         while iter_num <= self.train_steps:
-            state_mem, done = self.init_episode(env)
-
-            print '########## begin new episode #############'
-            act = self.pick_action(state_mem, 'train', iter_num)
-            for ep_iter in xrange(self.max_episode_length):
-                if _every_not_0(ep_iter, self.history.act_steps):
-                    # current list in history is the next state
-                    state_mem_next, reward, done = self.history.get_next()
-                    reward = self.preproc.clip_reward(reward)
-
-                    # store transition into replay memory
-                    transition = state_mem, act, reward, state_mem_next, done
-                    self.memory.append(transition)
-                    state_mem = state_mem_next
-
-                    # get online q value and get action
-                    act = self.pick_action(state_mem, 'train', iter_num)
-
-                # break if done
-                if done:
-                    break
-
-                # do action to get the next state
-                self.do_action(env, act)
-
-                # update networks
-                if _every(iter_num, self.online_train_interval):
-                    self.train_online(iter_num)
-                if _every(iter_num, self.target_reset_interval):
-                    self.update_target()
-
-                # set evaluation flag
-                if _every(iter_num, self.eval_interval):
-                    eval_flag = True
-
-                # save model
-                if _every(iter_num, self.save_interval):
-                    weights_save = os.path.join(self.output,
-                        'online_{:d}.h5'.format(iter_num))
-                    print '########## saving models and memory #############'
-                    self.q_net['online'].save_weights(weights_save)
-                    print 'online weights written to {:s}'.format(weights_save)
-                    memory_save = os.path.join(self.output, 'memory.p')
-                    self.memory.save(memory_save)
-                    print 'replay memory written to {:s}'.format(memory_save)
-
-                if _every(iter_num, self.print_loss_interval):
-                    self.print_loss()
-
-                iter_num += 1
-
-            # evaluation
+            _, iter_num, eval_flag = self.run_episode(env, 'train', iter_num)
             if eval_flag:
-                eval_flag = False
                 print '########## evaluation #############'
                 self.evaluate(env)
-            print '{:d} out of {:d} iterations'.format(iter_num, self.train_steps)
+            print '  iter {:d} out of {:d}'.format(iter_num, self.train_steps)
 
     def evaluate(self, env):
         total_reward = 0.0
         for episode in xrange(self.eval_episodes):
-            state_mem, done = self.init_episode(env)
-
-            episode_reward = 0.0
-            act = self.pick_action(state_mem, 'eval')
-            for ep_iter in xrange(self.max_episode_length):
-                if _every_not_0(ep_iter, self.history.act_steps):
-                    # current list in history is the next state
-                    state_mem, reward, done = self.history.get_next()
-                    episode_reward += reward
-
-                    # get online q value and get action
-                    act = self.pick_action(state_mem, 'eval')
-
-                # break if done
-                if done:
-                    break
-
-                # do action to get the next state
-                self.do_action(env, act)
-
+            episode_reward = self.run_episode(env, 'eval', 0)[0]
             print '  episode reward: {:f}'.format(episode_reward)
             total_reward += episode_reward
         average_reward = total_reward / self.eval_episodes
         print 'average episode reward: {:f}'.format(average_reward)
+
+    def run_episode(self, env, mode, iter_num):
+        print '*** New episode with policy:', mode
+        state_mem, done = self.init_episode(env)
+        episode_reward = 0.0
+        eval_flag = False
+        act = self.pick_action(state_mem, mode, iter_num)
+        for ep_iter in xrange(self.max_episode_length):
+            if _every_not_0(ep_iter, self.history.act_steps):
+                # current list in history is the next state
+                state_mem_next, reward, done = self.history.get_next()
+                episode_reward += reward
+                reward = self.preproc.clip_reward(reward)
+
+                # store transition into replay memory
+                transition = state_mem, act, reward, state_mem_next, done
+                self.memory.append(transition)
+                state_mem = state_mem_next
+
+                # get online q value and get action
+                act = self.pick_action(state_mem, mode, iter_num)
+
+            # break if done
+            if done:
+                break
+
+            # do action to get the next state
+            self.do_action(env, act)
+
+            # modify eval_flag and iter_num
+            if mode == 'train':
+                eval_flag = self.extra_work_train(iter_num) or eval_flag
+            iter_num += 1
+        print '*** End of episode'
+        return episode_reward, iter_num, eval_flag
+
+    def extra_work_train(self, iter_num):
+        # update networks
+        if _every(iter_num, self.online_train_interval):
+            self.train_online(iter_num)
+        if _every(iter_num, self.target_reset_interval):
+            self.update_target()
+
+        # save model
+        if _every(iter_num, self.save_interval):
+            weights_save = os.path.join(self.output,
+                'online_{:d}.h5'.format(iter_num))
+            print '########## saving models and memory #############'
+            self.q_net['online'].save_weights(weights_save)
+            print 'online weights written to {:s}'.format(weights_save)
+            memory_save = os.path.join(self.output, 'memory.p')
+            self.memory.save(memory_save)
+            print 'replay memory written to {:s}'.format(memory_save)
+
+        # print losses
+        if _every(iter_num, self.print_loss_interval):
+            self.print_loss()
+
+        # return evaluation flag
+        return _every(iter_num, self.eval_interval)
 
     def init_episode(self, env):
         # reset env and history
@@ -287,8 +235,8 @@ class DQNAgent(object):
             q_target_b.append([full_reward])
         return np.stack(q_target_b), online
 
-def _every(iteration, interval):
-    return not (iteration % interval)
+def _every(iter_num, interval):
+    return not (iter_num % interval)
 
-def _every_not_0(iteration, interval):
-    return not (iteration % interval) and iteration
+def _every_not_0(iter_num, interval):
+    return not (iter_num % interval) and iter_num

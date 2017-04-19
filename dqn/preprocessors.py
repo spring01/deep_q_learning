@@ -1,4 +1,5 @@
 
+import time
 import numpy as np
 from PIL import Image
 
@@ -29,6 +30,13 @@ class Preprocessor(object):
         else:
             return 0.0
 
+    def show_effect(self, state):
+        img_original = Image.fromarray(state)
+        img_processed = Image.fromarray(self.frame_to_frame_mem(state))
+        img_original.show()
+        time.sleep(0.1)
+        img_processed.show()
+
 
 class BottomSquarePreprocessor(Preprocessor):
 
@@ -47,10 +55,3 @@ class TopSquarePreprocessor(Preprocessor):
         self.crop_tuple = 0, 0, self.width, self.width
 
 
-class FlappyBirdPreprocessor(TopSquarePreprocessor):
-
-    def clip_reward(self, reward):
-        if reward > 0.0:
-            return 1.0;
-        else:
-            return 0.0

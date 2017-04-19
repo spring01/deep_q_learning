@@ -90,6 +90,13 @@ class DQNAgent(object):
     def train(self, env):
         self.update_target()
 
+        # show preprocessing effect
+        self.init_episode(env)
+        act = self.policy['init'].select_action()
+        frame, _, _, _ = env.step(act)
+        self.preproc.show_effect(frame)
+        env.reset()
+
         print '########## burning in some steps #############'
         while self.memory.size() < self.memory.burn_in_steps:
 

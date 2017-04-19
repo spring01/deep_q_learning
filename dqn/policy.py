@@ -24,7 +24,7 @@ class RandomPolicy(Policy):
         assert num_act >= 1
         self.num_act = num_act
 
-    def select_action(self):
+    def select_action(self, *args):
         return np.random.randint(0, self.num_act)
 
 
