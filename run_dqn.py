@@ -62,6 +62,7 @@ def main():
     # preprocessor
     env_preproc = defaultdict(lambda: Preprocessor)
     env_preproc['Breakout-v0'] = BottomSquarePreprocessor
+    env_preproc['Asterix-v0'] = TopSquarePreprocessor
     env_preproc['MsPacman-v0'] = TopSquarePreprocessor
     env_preproc['FlappyBird-v0'] = TopSquarePreprocessor
     preproc = env_preproc[args.env](args.resize)
