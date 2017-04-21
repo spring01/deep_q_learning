@@ -76,13 +76,14 @@ def main():
         exit()
 
     # online and target q networks
-    state_shape = preproc.height, preproc.width, args.num_frames
-    online = create_model(state_shape, num_act, args)
-    target = create_model(state_shape, num_act, args)
+    height, width, num_frames = preproc.height, preproc.width, args.num_frames
+    online = create_model(height, width, num_frames, num_act, args)
+    online.summary()
+    target = create_model(height, width, num_frames, num_act, args)
     q_net = {'online': online, 'target': target}
 
     # history and memory
-    history = History(args.num_frames, args.act_steps)
+    history = History(num_frames, args.act_steps)
     memory = PriorityMemory(args, args.act_steps, args.train_steps)
 
     # initialization, train, evaluation policies

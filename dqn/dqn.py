@@ -81,9 +81,12 @@ class DQN(object):
 
         print '########## begin training #############'
         iter_num = 0
+        num_episodes = 0
         while iter_num <= self.train_steps:
             _, iter_num, eval_flag = self.run_episode(env, 'train', iter_num)
+            num_episodes += 1
             print '  iter {:d} out of {:d}'.format(iter_num, self.train_steps)
+            print '  number of episodes: {:d}'.format(num_episodes)
             self.memory.print_status()
             if eval_flag:
                 print '########## evaluation #############'
