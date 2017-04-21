@@ -55,3 +55,13 @@ class TopSquarePreprocessor(Preprocessor):
         self.crop_tuple = 0, 0, self.width, self.height
 
 
+class MiddleSquarePreprocessor(Preprocessor):
+
+    def __init__(self, resize):
+        self.resize = resize
+        self.width = self.height = self.resize[0]
+        resize_ht = self.resize[1]
+        ht_start = int((resize_ht - self.width) / 2)
+        self.crop_tuple = 0, ht_start, self.width, ht_start + self.width
+
+
