@@ -109,6 +109,7 @@ class DQN(object):
         episode_reward = 0.0
         eval_flag = False
         act = self.pick_action(state_mem, policy, iter_num)
+        frame_done = False
         for ep_iter in xrange(self.max_episode_length):
             if _every_not_0(ep_iter, self.history.act_steps):
                 # current list in history is the next state
@@ -130,7 +131,8 @@ class DQN(object):
                 break
 
             # do action to get the next state
-            self.do_action(env, act)
+            if not frame_done:
+                frame_done = self.do_action(env, act)
 
             # modify eval_flag and iter_num
             if mode == 'train':
@@ -184,6 +186,7 @@ class DQN(object):
             env.render()
         frame_mem = self.preproc.frame_to_frame_mem(frame)
         self.history.append(frame_mem, frame_reward, frame_done)
+        return frame_done
 
     def pick_action(self, state_mem, policy, iter_num=0):
         state = self.preproc.state_mem_to_state(state_mem)

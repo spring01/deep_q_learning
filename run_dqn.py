@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Play game with DQN."""
 
+import os
 import gym
 import argparse
 from collections import defaultdict
@@ -30,7 +31,9 @@ def main():
     parser.add_argument('--show_preprocessing', default=False, type=bool,
         help='Show preprocessing effect at the beginning')
     parser.add_argument('--mode', default='train', type=str,
-        help='Running mode; train/eval/rand')
+        help='Running mode; train/eval/rand/video')
+    parser.add_argument('--num_videos', default=20, type=int,
+        help='Number of video clips the agent generates in video mode')
     DQN.add_arguments(parser)
     PriorityMemory.add_arguments(parser)
     Policy.add_arguments(parser)
@@ -115,6 +118,13 @@ def main():
     elif args.mode == 'rand':
         print '########## random #############'
         agent.random(env)
+    elif args.mode == 'video':
+        for i in range(args.num_videos):
+            env.reset()
+            video_output = os.path.join(output, 'video%d' % i)
+            env_video = gym.wrappers.Monitor(env, video_output, force=True)
+            reward = agent.run_episode(env_video, 'eval', 0, False)[0]
+            print '  video with reward %f is in %s' % (reward, video_output)
 
 
 
